@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+log/
+*.log
+
+# 不需要上传的文件
+out/
+.claude/
+*.tmp
+
+# personal file
+task.txt
+
+# 保留重要的文档文件
+!README.md
+!requirements.txt
+!CLAUDE.md
