@@ -665,9 +665,13 @@ class SerialPortTool(QMainWindow):
         self._trim_display()
 
     def _choose_font(self) -> None:
-        font, accepted = QFontDialog.getFont(self.display.font(), self, "选择字体")
-        if not accepted:
+        # Use the instance API: the static QFontDialog.getFont() returns
+        # (ok, font) in PySide6 6.x, which is easy to unpack the wrong way.
+        dialog = QFontDialog(self.display.font(), self)
+        dialog.setWindowTitle("选择字体")
+        if dialog.exec() != QDialog.Accepted:
             return
+        font = dialog.currentFont()
         self.display.setFont(font)
         self.send_edit.setFont(font)
         self._save_config()

@@ -195,6 +195,86 @@ class TestPersistence:
             second.close()
 
 
+class TestFontChoice:
+    """Regression: the static QFontDialog.getFont() returns (ok, font) in PySide6 6.x,
+    so unpacking it as (font, ok) fed a bool into setFont and left the window stuck."""
+
+    def test_accepted_applies_font_to_both_editors(self, window, monkeypatch):
+        from PySide6.QtGui import QFont
+        from PySide6.QtWidgets import QDialog
+
+        import serial_tool.ui.main_window as mw
+
+        class FakeDialog:
+            def __init__(self, initial, parent=None):
+                self._font = QFont("Consolas", 13)
+
+            def setWindowTitle(self, title):
+                self.title = title
+
+            def exec(self):
+                return QDialog.Accepted
+
+            def currentFont(self):
+                return self._font
+
+        monkeypatch.setattr(mw, "QFontDialog", FakeDialog)
+        window._choose_font()
+
+        assert window.display.font().family() == "Consolas"
+        assert window.send_edit.font().family() == "Consolas"
+
+    def test_rejected_leaves_font_untouched(self, window, monkeypatch):
+        from PySide6.QtWidgets import QDialog
+
+        import serial_tool.ui.main_window as mw
+
+        before = window.display.font().family()
+
+        class FakeDialog:
+            def __init__(self, initial, parent=None):
+                pass
+
+            def setWindowTitle(self, title):
+                pass
+
+            def exec(self):
+                return QDialog.Rejected
+
+            def currentFont(self):
+                raise AssertionError("must not be read when the dialog is rejected")
+
+        monkeypatch.setattr(mw, "QFontDialog", FakeDialog)
+        window._choose_font()
+
+        assert window.display.font().family() == before
+
+    def test_window_still_closable_after_choosing_font(self, window, monkeypatch):
+        from PySide6.QtGui import QFont
+        from PySide6.QtWidgets import QDialog
+
+        import serial_tool.ui.main_window as mw
+
+        class FakeDialog:
+            def __init__(self, initial, parent=None):
+                pass
+
+            def setWindowTitle(self, title):
+                pass
+
+            def exec(self):
+                return QDialog.Accepted
+
+            def currentFont(self):
+                return QFont("Consolas", 13)
+
+        monkeypatch.setattr(mw, "QFontDialog", FakeDialog)
+        window.show()
+        window._choose_font()
+        window.close()
+        assert not window.isVisible()
+
+
 class TestRetention:
     def test_trim_removes_old_lines_keeps_recent(self, window):
         """Recent content must still be there after old data is reclaimed."""
