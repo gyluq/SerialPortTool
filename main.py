@@ -1,29 +1,38 @@
+"""Application entry point.
+
+Keeps the same launch command as before: `python main.py`.
+"""
+
+from __future__ import annotations
+
 import sys
-import serial.tools.list_ports
 from pathlib import Path
-from PySide6.QtWidgets import QApplication
+
 from PySide6.QtGui import QIcon
-from modules import SerialPortTool, apply_stylesheet
+from PySide6.QtWidgets import QApplication
+
+from serial_tool.ui.main_window import SerialPortTool, apply_stylesheet
+
+ICON_PATH = Path(__file__).resolve().parent / "icon.png"
 
 
-def main():
+def main() -> int:
     app = QApplication(sys.argv)
-    
-    # 设置应用程序图标
-    icon_path = Path(__file__).parent / "icon.png"
-    if icon_path.exists():
-        app.setWindowIcon(QIcon(str(icon_path)))
-    
-    # 应用样式
+    app.setApplicationName("SerialPortTool")
+    app.setOrganizationName("SerialPortTool")
+
+    if ICON_PATH.exists():
+        app.setWindowIcon(QIcon(str(ICON_PATH)))
+
     apply_stylesheet(app)
-    
-    # 创建并显示主窗口
+
     window = SerialPortTool()
-    window.setWindowIcon(QIcon(str(icon_path)))
+    if ICON_PATH.exists():
+        window.setWindowIcon(QIcon(str(ICON_PATH)))
     window.show()
 
-    sys.exit(app.exec())
+    return app.exec()
 
 
-if __name__ == "__main__": 
-    main()
+if __name__ == "__main__":
+    sys.exit(main())

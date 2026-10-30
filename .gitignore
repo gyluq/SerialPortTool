@@ -41,3 +41,9 @@ task.txt
 !README.md
 !requirements.txt
 !CLAUDE.md
+
+.user/
+.workbuddy/
+AGENTS.md
+
+.pytest_cache/
