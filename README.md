@@ -92,8 +92,12 @@ and send path is tested against `tests.fakes.FakeTransport`.
 ## Packaging
 
 ```bash
-pyinstaller --onefile --windowed --icon=icon.png --name=SerialPortTool main.py
+pip install pyinstaller
+pyinstaller packaging.spec
 ```
+
+The spec bundles `icon.png` and hides the console window. Output goes to
+`dist/SerialPortTool.exe` (or `dist/SerialPortTool` on Linux/macOS).
 
 ## License
 

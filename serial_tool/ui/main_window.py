@@ -515,17 +515,19 @@ class SerialPortTool(QMainWindow):
 
         text = codec.decode_text(data)
         stamp = now_stamp()
+        # The checkbox governs both the display and the log, so resolve it once.
+        show_stamp = stamp if self.timestamp_check.isChecked() else None
 
         if self._log_writer is not None:
-            self._log_writer.write(text, stamp if self.timestamp_check.isChecked() else None)
+            self._log_writer.write(text, show_stamp)
 
         if self._paused:
-            self._buffer_while_paused(text, stamp)
+            self._buffer_while_paused(text, show_stamp)
             return
 
-        self._append_received(text, stamp)
+        self._append_received(text, show_stamp)
 
-    def _buffer_while_paused(self, text: str, stamp: str) -> None:
+    def _buffer_while_paused(self, text: str, stamp: str | None) -> None:
         self._pause_buffer.append((text, stamp))
         self._pause_chars += len(text)
         limit = limit_to_chars(self.config.limit_label)

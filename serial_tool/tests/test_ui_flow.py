@@ -149,6 +149,52 @@ class TestHighlight:
         assert loaded[1].color == "#ffaa00"
 
 
+class TestTimestamp:
+    def test_only_first_line_of_chunk_gets_stamp(self, connected):
+        """A multi-line chunk carries one timestamp, on its first line only."""
+        window, _ = connected
+        window.timestamp_check.setChecked(True)
+        window.display.clear()
+        window.handle_received_bytes(b"aaa\nbbb\nccc")
+
+        text = window.display.toPlainText()
+        lines = [ln for ln in text.splitlines() if ln.strip()]
+        stamped = [ln for ln in lines if ln.lstrip().startswith("[")]
+        assert len(stamped) == 1
+        assert "aaa" in stamped[0]
+        assert "bbb" in lines[1]
+
+    def test_stamp_suppressed_when_checkbox_off(self, connected):
+        window, _ = connected
+        window.timestamp_check.setChecked(False)
+        window.display.clear()
+        window.handle_received_bytes(b"no-stamp")
+
+        text = window.display.toPlainText()
+        assert "[" not in text
+
+
+class TestPersistence:
+    def test_settings_survive_reopen(self, qapp, store):
+        """Baud rate and toggles must come back on the next start."""
+        from serial_tool.ui.main_window import SerialPortTool
+
+        first = SerialPortTool(store=store)
+        first.baud_combo.setCurrentText("921600")
+        first.autoscroll_check.setChecked(False)
+        first.hex_check.setChecked(True)
+        first._save_config()
+        first.close()
+
+        second = SerialPortTool(store=store)
+        try:
+            assert second.baud_combo.currentText() == "921600"
+            assert second.autoscroll_check.isChecked() is False
+            assert second.hex_check.isChecked() is True
+        finally:
+            second.close()
+
+
 class TestRetention:
     def test_trim_removes_old_lines_keeps_recent(self, window):
         """Recent content must still be there after old data is reclaimed."""
