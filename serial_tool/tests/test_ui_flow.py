@@ -194,6 +194,26 @@ class TestPersistence:
         finally:
             second.close()
 
+    def test_font_survives_reopen(self, qapp, store):
+        """A chosen font must be restored, otherwise it silently resets each start."""
+        from PySide6.QtGui import QFont
+
+        from serial_tool.ui.main_window import SerialPortTool
+
+        first = SerialPortTool(store=store)
+        first.display.setFont(QFont("Courier New", 18))
+        first.send_edit.setFont(QFont("Courier New", 18))
+        first._save_config()
+        first.close()
+
+        second = SerialPortTool(store=store)
+        try:
+            assert second.display.font().family() == "Courier New"
+            assert second.display.font().pointSize() == 18
+            assert second.send_edit.font().pointSize() == 18
+        finally:
+            second.close()
+
 
 class TestFontChoice:
     """Regression: the static QFontDialog.getFont() returns (ok, font) in PySide6 6.x,
@@ -207,7 +227,7 @@ class TestFontChoice:
 
         class FakeDialog:
             def __init__(self, initial, parent=None):
-                self._font = QFont("Consolas", 13)
+                self._font = QFont("Courier New", 17)
 
             def setWindowTitle(self, title):
                 self.title = title
@@ -221,8 +241,68 @@ class TestFontChoice:
         monkeypatch.setattr(mw, "QFontDialog", FakeDialog)
         window._choose_font()
 
-        assert window.display.font().family() == "Consolas"
-        assert window.send_edit.font().family() == "Consolas"
+        assert window.display.font().family() == "Courier New"
+        assert window.send_edit.font().family() == "Courier New"
+
+    def test_chosen_size_survives_the_stylesheet(self, window, monkeypatch):
+        """A font-size in the global stylesheet used to pin QTextEdit and turn the
+        font picker into a no-op: pointSize() came back as -1 and nothing redrew."""
+        from PySide6.QtGui import QFont
+        from PySide6.QtWidgets import QDialog
+
+        import serial_tool.ui.main_window as mw
+
+        class FakeDialog:
+            def __init__(self, initial, parent=None):
+                pass
+
+            def setWindowTitle(self, title):
+                pass
+
+            def exec(self):
+                return QDialog.Accepted
+
+            def currentFont(self):
+                return QFont("Courier New", 17)
+
+        monkeypatch.setattr(mw, "QFontDialog", FakeDialog)
+        window._choose_font()
+
+        assert window.display.font().pointSize() == 17
+        assert window.send_edit.font().pointSize() == 17
+
+    def test_render_changes_after_font_change(self, window, monkeypatch):
+        """The visible proof: the same text must not paint identically at two sizes."""
+        from PySide6.QtGui import QFont
+        from PySide6.QtWidgets import QApplication, QDialog
+
+        import serial_tool.ui.main_window as mw
+
+        window.resize(600, 300)
+        window.show()
+        window._append_line(Line("HELLO 12345", Style.RECEIVED, "00:00:00.000"))
+        QApplication.processEvents()
+        before = window.display.grab().toImage()
+
+        class BigDialog:
+            def __init__(self, initial, parent=None):
+                pass
+
+            def setWindowTitle(self, title):
+                pass
+
+            def exec(self):
+                return QDialog.Accepted
+
+            def currentFont(self):
+                return QFont("Courier New", 26)
+
+        monkeypatch.setattr(mw, "QFontDialog", BigDialog)
+        window._choose_font()
+        QApplication.processEvents()
+        after = window.display.grab().toImage()
+
+        assert before != after
 
     def test_rejected_leaves_font_untouched(self, window, monkeypatch):
         from PySide6.QtWidgets import QDialog

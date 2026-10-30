@@ -40,15 +40,23 @@ QPushButton {
 QPushButton:hover { background-color: #f8f9fa; border-color: #adb5bd; }
 QPushButton:pressed { background-color: #e9ecef; border-color: #adb5bd; }
 QPushButton:disabled { background-color: #f8f9fa; color: #6c757d; border-color: #dee2e6; }
-QComboBox, QLineEdit, QTextEdit {
+QComboBox, QLineEdit {
     background-color: white;
     border: 1px solid #cccccc;
     border-radius: 4px;
     padding: 2px 6px;
     font-size: 11px;
 }
+/* No font-size here: QTextBrowser inherits QTextEdit, so a size in this rule
+   would also pin the display font and make the font picker a no-op. */
+QTextEdit#sendEdit {
+    background-color: white;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 2px 6px;
+}
 QComboBox:hover, QLineEdit:hover { border-color: #adb5bd; }
-QLineEdit:focus, QTextEdit:focus { border-color: #007bff; }
+QLineEdit:focus, QTextEdit#sendEdit:focus { border-color: #007bff; }
 QCheckBox { color: #333333; }
 QMenuBar {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f8f9fa, stop:1 #e9ecef);

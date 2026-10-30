@@ -273,6 +273,7 @@ class SerialPortTool(QMainWindow):
         send_layout.setSpacing(6)
 
         self.send_edit = QTextEdit()
+        self.send_edit.setObjectName("sendEdit")
         self.send_edit.setPlaceholderText("输入要发送的数据...")
         self.send_edit.setMinimumHeight(35)
         self.send_edit.setMaximumHeight(70)
@@ -391,7 +392,9 @@ class SerialPortTool(QMainWindow):
             self.hex_check.setChecked(cfg.hex_mode)
             self.newline_check.setChecked(cfg.append_newline)
             self.log_check.setChecked(cfg.log_enabled)
-            self.display.setFont(QFont(cfg.font_family, cfg.font_size))
+            font = QFont(cfg.font_family, cfg.font_size)
+            self.display.setFont(font)
+            self.send_edit.setFont(font)
 
             if cfg.limit_label in self._limit_actions:
                 self._limit_actions[cfg.limit_label].setChecked(True)

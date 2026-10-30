@@ -21,7 +21,12 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 @pytest.fixture(scope="session")
 def qapp():
+    from serial_tool.ui.main_window import apply_stylesheet
+
     app = QApplication.instance() or QApplication([])
+    # Apply the real stylesheet: a rule with font-size would silently override
+    # setFont, and tests must see that, not a bare widget.
+    apply_stylesheet(app)
     yield app
 
 
