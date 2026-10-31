@@ -132,6 +132,7 @@ class SerialPortTool(QMainWindow):
         self._pause_buffer: Deque[tuple[str, str | None]] = deque()
         self._pause_chars = 0
         self._block_chars: list[int] = []
+        self._block_total = 0
 
         self.counters = Counter()
         self._ports: list[PortInfo] = []
@@ -359,7 +360,7 @@ class SerialPortTool(QMainWindow):
     def _wire(self) -> None:
         self.connect_button.clicked.connect(self._toggle_connection)
         self.pause_button.clicked.connect(self._toggle_pause)
-        self.clear_button.clicked.connect(self.display.clear)
+        self.clear_button.clicked.connect(self._clear_display)
         self.send_button.clicked.connect(self._send)
         self.send_clear_button.clicked.connect(self.send_edit.clear)
         self.send_edit.textChanged.connect(self._update_send_state)
@@ -546,20 +547,32 @@ class SerialPortTool(QMainWindow):
             )
 
     def _append_line(self, line: render.Line) -> None:
-        cursor = QTextCursor(self.display.document())
-        cursor.movePosition(QTextCursor.End)
-        cursor.insertHtml(render.render_line_html(line))
+        # append() appends a block in O(1); inserting into a cursor at the end
+        # re-lays out the document on every call and slows down linearly with
+        # the number of lines already shown. append() also keeps the user's
+        # selection, because it does not move the visible cursor.
+        self.display.append(render.render_paragraph_html(line))
 
-        self._block_chars.append(len(line.text) + 1)
+        size = len(line.text) + 1
+        self._block_chars.append(size)
+        self._block_total += size
         self._trim_display()
 
         if self.autoscroll_check.isChecked():
             bar = self.display.verticalScrollBar()
             bar.setValue(bar.maximum())
 
+    def _clear_display(self) -> None:
+        """Clear the view and the reclamation bookkeeping together."""
+        self.display.clear()
+        self._block_chars.clear()
+        self._block_total = 0
+
     def _trim_display(self) -> None:
         limit = limit_to_chars(self.config.limit_label)
-        if limit <= 0:
+        # The running total keeps this check O(1); recomputing it from the
+        # block list on every single line would dominate the receive path.
+        if limit <= 0 or self._block_total <= limit:
             return
 
         plan = trim_plan(self._block_chars, limit)
@@ -571,12 +584,17 @@ class SerialPortTool(QMainWindow):
         start.movePosition(QTextCursor.Start)
         end = QTextCursor(document)
         end.movePosition(QTextCursor.Start)
+        deleted = 0
         for _ in range(plan.delete_blocks):
             if not end.movePosition(QTextCursor.NextBlock):
                 break
+            deleted += 1
+        if deleted <= 0:
+            return
         start.setPosition(end.position(), QTextCursor.KeepAnchor)
         start.removeSelectedText()
-        del self._block_chars[: plan.delete_blocks]
+        self._block_total -= sum(self._block_chars[:deleted])
+        del self._block_chars[:deleted]
 
     def _toggle_pause(self) -> None:
         self._paused = not self._paused

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -358,32 +360,66 @@ class TestFontChoice:
 class TestRetention:
     def test_trim_removes_old_lines_keeps_recent(self, window):
         """Recent content must still be there after old data is reclaimed."""
-        window.display.clear()
-        window._block_chars.clear()
+        window._clear_display()
         for i in range(300):
             window._append_line(Line(f"line-{i}", Style.RECEIVED, None))
 
-        # Drop the limit to 200 characters to force reclamation
-        window.config.limit_label = "100KB"
-        window._block_chars = [9] * 300
+        # 300 lines are well past 1 KiB, so the next append triggers reclamation
+        window.config.limit_label = "1KB"
         window._trim_display()
 
         text = window.display.toPlainText()
         assert "line-299" in text
+        assert "line-0\n" not in text
 
     def test_trim_preserves_html_formatting(self, connected):
         """Reclamation deletes whole blocks, so surviving lines keep their color markup
         and the document has no broken tags."""
         window, _ = connected
-        window.display.clear()
-        window._block_chars.clear()
+        window._clear_display()
         for i in range(200):
             window._append_line(Line(f"row-{i} 数据", Style.RECEIVED, "12:00:00.000"))
 
-        window._block_chars = [12] * 200
-        window.config.limit_label = "100KB"
+        window.config.limit_label = "1KB"
         window._trim_display()
 
         html = window.display.toHtml()
         assert "row-199" in window.display.toPlainText()
         assert html.count("<p") == window.display.document().blockCount()
+
+
+class TestStreaming:
+    """Guards for the append-based receive path.
+
+    Inserting each line with QTextCursor.insertHtml() at the end of the
+    document costs time proportional to the document size, which made a 64 KB
+    burst take seconds. append() is constant time, so these tests pin both the
+    speed and the layout it produces.
+    """
+
+    def test_one_block_per_line(self, window):
+        window._clear_display()
+        for i in range(5):
+            window._append_line(Line(f"row-{i}", Style.RECEIVED, None))
+
+        assert window.display.document().blockCount() == 5
+        assert window.display.toPlainText() == "row-0\nrow-1\nrow-2\nrow-3\nrow-4"
+
+    def test_received_multi_line_has_no_blank_rows(self, window):
+        window._clear_display()
+        window.timestamp_check.setChecked(False)
+        window.handle_received_bytes(b"a\nb\nc\n")
+
+        assert window.display.toPlainText() == "a\nb\nc"
+        assert window.display.document().blockCount() == 3
+
+    def test_thousands_of_lines_stay_fast(self, window):
+        window._clear_display()
+        start = time.perf_counter()
+        for _ in range(4000):
+            window._append_line(Line("x" * 60, Style.RECEIVED, None))
+        elapsed = time.perf_counter() - start
+
+        # 4000 lines take well under a second now; the old cursor insertion
+        # needed over a minute for this, so 5 s only catches a real regression.
+        assert elapsed < 5.0, f"4000 lines took {elapsed:.1f}s"
