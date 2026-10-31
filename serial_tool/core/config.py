@@ -7,10 +7,39 @@ adapted in the ui layer.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, fields
+from pathlib import Path
 from typing import Any
 
 _TRUE_WORDS = {"1", "true", "yes", "on"}
 _FALSE_WORDS = {"0", "false", "no", "off", ""}
+
+
+def app_base_dir(is_frozen: bool, executable: Path | str, package_file: Path | str) -> Path:
+    """Directory that should hold files meant to outlive the process, such as logs.
+
+    A onefile PyInstaller build unpacks the package into a temporary directory
+    (``_MEIxxxx``) and deletes it on exit, so ``__file__`` is useless there: it
+    would put logs somewhere the user can never open. When frozen, the anchor
+    is the executable instead.
+
+    Callers pass ``sys.frozen``, ``sys.executable`` and ``__file__`` rather than
+    reading them here, so the rule stays a pure function and stays testable.
+    """
+    if is_frozen:
+        return Path(executable).resolve().parent
+    return Path(package_file).resolve().parents[2]
+
+
+def resource_dir(is_frozen: bool, bundle_dir: str | None, package_file: Path | str) -> Path:
+    """Directory holding read-only assets shipped with the app (icon, data files).
+
+    This is a different question from app_base_dir: bundled assets do live
+    inside the temporary unpack dir, so when frozen it is the right answer.
+    Keeping the two rules apart stops one being used for the other by accident.
+    """
+    if is_frozen and bundle_dir:
+        return Path(bundle_dir)
+    return Path(package_file).resolve().parent
 
 
 def _to_bool(value: Any) -> bool:

@@ -7,14 +7,23 @@ from __future__ import annotations
 
 import sys
 import traceback
-from pathlib import Path
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from serial_tool.core.config import resource_dir
 from serial_tool.ui.main_window import SerialPortTool, apply_stylesheet
 
-ICON_PATH = Path(__file__).resolve().parent / "icon.png"
+# Bundled assets are unpacked into the temporary _MEIPASS directory in a
+# packaged build, which is not the same place as the log directory.
+ICON_PATH = (
+    resource_dir(
+        is_frozen=bool(getattr(sys, "frozen", False)),
+        bundle_dir=getattr(sys, "_MEIPASS", None),
+        package_file=__file__,
+    )
+    / "icon.png"
+)
 
 
 def install_exception_hook() -> None:

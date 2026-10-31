@@ -3,6 +3,7 @@ delegated to serial_tool.core."""
 
 from __future__ import annotations
 
+import sys
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -35,7 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from serial_tool.core import codec, layout, render
-from serial_tool.core.config import AppConfig
+from serial_tool.core.config import AppConfig, app_base_dir
 from serial_tool.core.counters import Counter
 from serial_tool.core.highlight import Rule
 from serial_tool.core.logfile import LogWriter, build_log_path
@@ -64,7 +65,13 @@ from serial_tool.ui.styles import (
 LIMIT_LABELS: tuple[str, ...] = ("100KB", "500KB", "1MB", "2MB", "5MB", "10MB", "无限制")
 PORT_REFRESH_MS = 1000
 READ_IDLE_SLEEP_MS = 10
-APP_DIR = Path(__file__).resolve().parents[2]
+# Logs go next to the executable in a packaged build, not inside the temp
+# unpack dir that PyInstaller deletes on exit.
+APP_DIR = app_base_dir(
+    is_frozen=bool(getattr(sys, "frozen", False)),
+    executable=sys.executable,
+    package_file=__file__,
+)
 
 
 def limit_to_chars(label: str) -> int:
