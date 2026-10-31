@@ -105,13 +105,48 @@ and send path is tested against `tests.fakes.FakeTransport`.
 
 ## Packaging
 
+### Standalone executable
+
 ```bash
-pip install pyinstaller
+pip install -r requirements-dev.txt
 pyinstaller packaging.spec
 ```
 
-The spec bundles `icon.png` and hides the console window. Output goes to
-`dist/SerialPortTool.exe` (or `dist/SerialPortTool` on Linux/macOS).
+`packaging.spec` bundles `icon.png`, embeds `icon.ico` and `version_info.txt`,
+and excludes the Qt modules the app never imports. Output is a single
+self-contained `dist/SerialPortTool.exe` (~43 MB); the target machine needs
+nothing installed. On Linux/macOS the same spec produces `dist/SerialPortTool`.
+
+### Windows installer
+
+Requires [Inno Setup 6](https://jrsoftware.org/isdl.php)
+(`winget install --id JRSoftware.InnoSetup -e`). Then run the whole chain —
+tests, executable, installer — with one command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\build_installer.ps1
+```
+
+The result is `dist/SerialPortTool-1.0.0-setup.exe` (~44 MB). Run
+`iscc installer\SerialPortTool.iss` alone to rebuild only the installer.
+
+What the installer does:
+
+| | |
+|---|---|
+| Install location | `%LOCALAPPDATA%\Programs\SerialPortTool` |
+| Elevation | none — per-user install, no UAC prompt |
+| Shortcuts | Start menu always, desktop optional |
+| Uninstall | standard Windows entry; asks before deleting `log\` |
+
+The per-user location is deliberate, not incidental: the app writes its
+`log\` folder next to the executable, so it must not live under
+`Program Files`, where a normal user cannot write.
+
+Note for packagers: `app_base_dir()` in `core/config.py` resolves data paths
+from `sys.executable` when frozen. A onefile build unpacks into a temporary
+`_MEIxxxx` directory that is deleted on exit, so deriving the log path from
+`__file__` would silently lose every recording.
 
 ## License
 
