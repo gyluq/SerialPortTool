@@ -57,6 +57,20 @@ The suite runs headless (`QT_QPA_PLATFORM=offscreen`) and needs no hardware:
 the serial port is replaced by a fake transport, settings are written to a
 temporary ini file.
 
+## Benchmark
+
+```bash
+python tools/bench_receive.py                       # all in-process scenarios
+python tools/bench_receive.py --only stream --total-mb 8
+python tools/bench_receive.py --only loss --limit 1MB
+python tools/bench_receive.py --only loop --total-mb 4   # reader thread + driver buffer
+```
+
+Scenarios: `single` (largest payload per call), `stream` (sustained MB/s),
+`loss` (sequence-number audit for holes), `pause` (paused-buffer cap), `memory`
+(RSS per capacity setting), `send` (large outbound paste), `loop` (end-to-end
+through the real reader thread).
+
 ## Architecture
 
 ```
