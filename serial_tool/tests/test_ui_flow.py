@@ -595,3 +595,18 @@ class TestCompactBarCommands:
         window.mini_send_edit.setText("ping")
 
         assert window.mini_send_button.isEnabled() is False
+
+
+class TestDialogText:
+    def test_rules_dialog_buttons_are_chinese(self, qapp):
+        """The UI is all Chinese, so the standard buttons must not read OK/Cancel."""
+        from PySide6.QtWidgets import QDialogButtonBox
+
+        from serial_tool.ui.rules_dialog import RulesDialog
+
+        dialog = RulesDialog(None, [])
+        box = dialog.findChild(QDialogButtonBox)
+
+        assert box.button(QDialogButtonBox.Ok).text() == "确定"
+        assert box.button(QDialogButtonBox.Cancel).text() == "取消"
+        dialog.close()

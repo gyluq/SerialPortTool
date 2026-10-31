@@ -274,9 +274,9 @@ class SerialPortTool(QMainWindow):
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("输入搜索关键词...")
         self.search_edit.setMinimumWidth(150)
-        self.search_prev_button = QPushButton("previous")
+        self.search_prev_button = QPushButton("上一个")
         self.search_prev_button.setToolTip("向上搜索")
-        self.search_next_button = QPushButton("next")
+        self.search_next_button = QPushButton("下一个")
         self.search_next_button.setToolTip("向下搜索")
 
         for widget in (
