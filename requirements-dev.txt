@@ -1,2 +1,4 @@
 pytest
 pyinstaller
+# tools/make_icon.py 绘制并导出图标
+Pillow

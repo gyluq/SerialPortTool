@@ -18,7 +18,7 @@ a = Analysis(
     [str(ROOT / "main.py")],
     pathex=[str(ROOT)],
     binaries=[],
-    datas=[(str(ROOT / "icon.png"), ".")],
+    datas=[(str(ROOT / "icon.png"), "."), (str(ROOT / "icon.ico"), ".")],
     hiddenimports=["serial.tools.list_ports"],
     hookspath=[],
     hooksconfig={},
