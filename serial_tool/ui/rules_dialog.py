@@ -22,6 +22,18 @@ from PySide6.QtWidgets import (
 from serial_tool.core.highlight import Rule, compile_rule
 
 
+def localise_buttons(box: QDialogButtonBox) -> None:
+    """Label the standard buttons in Chinese.
+
+    Qt only translates them when a translation catalogue is loaded; without one
+    the all-Chinese UI ends up with an "OK / Cancel" pair.
+    """
+    for role, text in ((QDialogButtonBox.Ok, "确定"), (QDialogButtonBox.Cancel, "取消")):
+        button = box.button(role)
+        if button is not None:
+            button.setText(text)
+
+
 class RuleEditDialog(QDialog):
     """Editing a single rule."""
 
@@ -46,6 +58,7 @@ class RuleEditDialog(QDialog):
         form.addRow("高亮颜色:", self._color_button)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        localise_buttons(buttons)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
@@ -110,6 +123,7 @@ class RulesDialog(QDialog):
         tools.addStretch()
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        localise_buttons(buttons)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 

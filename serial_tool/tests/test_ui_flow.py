@@ -423,3 +423,190 @@ class TestStreaming:
         # 4000 lines take well under a second now; the old cursor insertion
         # needed over a minute for this, so 5 s only catches a real regression.
         assert elapsed < 5.0, f"4000 lines took {elapsed:.1f}s"
+
+
+class TestConsoleCollapse:
+    """The console collapses to a one-line bar.
+
+    It hides automatically when the window is too narrow, but once the user
+    toggles it by hand the width stops deciding, so the window never fights
+    the person using it.
+    """
+
+    def _show(self, window, width):
+        from PySide6.QtWidgets import QApplication
+
+        window.resize(width, 800)
+        window.show()
+        QApplication.processEvents()
+        return window
+
+    def test_default_layout_shows_console(self, window):
+        self._show(window, 1320)
+
+        assert window.console_area.isVisible() is True
+        assert window.compact_bar.isVisible() is False
+        assert window.console_toggle_button.text() == "收起控制台 ▾"
+
+    def test_console_toggle_hides_console(self, window):
+        self._show(window, 1320)
+
+        window.console_toggle_button.click()
+        self._show(window, 1320)
+
+        assert window.console_area.isVisible() is False
+        assert window.compact_bar.isVisible() is True
+        assert window.console_toggle_button.text() == "展开控制台 ▴"
+
+    def test_compact_toggle_brings_it_back_and_syncs_both_labels(self, window):
+        self._show(window, 900)
+        assert window.compact_bar.isVisible() is True
+
+        window.mini_toggle_button.click()
+        self._show(window, 900)
+
+        assert window.console_area.isVisible() is True
+        assert window.compact_bar.isVisible() is False
+        assert window.mini_toggle_button.text() == "收起控制台 ▾"
+        assert window.console_toggle_button.text() == "收起控制台 ▾"
+
+    def test_narrow_window_hides_console_automatically(self, window):
+        self._show(window, 900)
+
+        assert window.console_area.isVisible() is False
+        assert window.compact_bar.isVisible() is True
+
+    def test_widening_restores_the_console(self, window):
+        self._show(window, 900)
+        assert window.console_area.isVisible() is False
+
+        self._show(window, 1320)
+
+        assert window.console_area.isVisible() is True
+        assert window.compact_bar.isVisible() is False
+
+    def test_manual_choice_survives_resizing(self, window):
+        self._show(window, 1320)
+        window.console_toggle_button.click()
+
+        self._show(window, 1400)
+
+        assert window.console_area.isVisible() is False, "manual hide must win over width"
+
+    def test_manual_show_wins_in_a_narrow_window(self, window):
+        self._show(window, 900)
+        window.mini_toggle_button.click()
+        self._show(window, 900)
+
+        assert window.console_area.isVisible() is True
+        # The console cannot fit, so it must scroll rather than overlap.
+        assert window.console_area.horizontalScrollBar().isVisible() is True
+
+    def test_menu_action_follows_visibility(self, window):
+        self._show(window, 1320)
+        assert window.console_action.isChecked() is True
+
+        window.console_toggle_button.click()
+        self._show(window, 1320)
+        assert window.console_action.isChecked() is False
+
+        window.console_action.trigger()
+        assert window.console_area.isVisible() is True
+        assert window.console_action.isChecked() is True
+
+    def test_window_can_shrink_below_console_width(self, window):
+        """Regression: the console used to pin the window at 1201 px, which made
+        the automatic collapse unreachable."""
+        from serial_tool.core.layout import CONSOLE_BREAKPOINT
+
+        assert window.minimumSizeHint().width() < CONSOLE_BREAKPOINT
+
+    def test_no_scrollbar_at_default_width(self, window):
+        self._show(window, 1320)
+
+        assert window.console_area.horizontalScrollBar().isVisible() is False
+
+
+class TestCompactBarCommands:
+    """The compact bar is a real controller, not just an expander."""
+
+    def _show(self, window, width=900):
+        from PySide6.QtWidgets import QApplication
+
+        window.resize(width, 800)
+        window.show()
+        QApplication.processEvents()
+        return window
+
+    def test_connect_button_mirrors_state(self, connected):
+        window, _fake = connected
+        self._show(window)
+
+        assert window.mini_connect_button.text() == "断开"
+        window.mini_connect_button.click()
+
+        assert window.mini_connect_button.text() == "连接"
+        assert window.connect_button.text() == "连接"
+
+    def test_pause_button_mirrors_state(self, connected):
+        window, _fake = connected
+        self._show(window)
+
+        window.mini_pause_button.click()
+
+        assert window.mini_pause_button.text() == "恢复接收"
+        assert window.pause_button.text() == "恢复接收"
+
+        window.mini_pause_button.click()
+        assert window.pause_button.text() == "暂停接收"
+
+    def test_clear_button_empties_the_display(self, connected):
+        window, _fake = connected
+        self._show(window)
+        window.handle_received_bytes(b"data")
+
+        window.mini_clear_button.click()
+
+        assert window.display.toPlainText() == ""
+
+    def test_inline_send_writes_bytes(self, connected):
+        window, fake = connected
+        self._show(window)
+
+        window.mini_send_edit.setText("ping")
+        window.mini_send_button.click()
+        window._session.drain_writes()
+
+        assert fake.written == [b"ping"]
+
+    def test_inline_send_follows_hex_mode(self, connected):
+        window, fake = connected
+        self._show(window)
+        window.hex_check.setChecked(True)
+
+        window.mini_send_edit.setText("01 02")
+        window.mini_send_button.click()
+        window._session.drain_writes()
+
+        assert fake.written == [b"\x01\x02"]
+
+    def test_inline_send_disabled_until_connected(self, window):
+        self._show(window)
+        window.mini_send_edit.setText("ping")
+
+        assert window.mini_send_button.isEnabled() is False
+
+
+class TestDialogText:
+    def test_rules_dialog_buttons_are_chinese(self, qapp):
+        """The UI is all Chinese, so the standard buttons must not read OK/Cancel."""
+        from PySide6.QtWidgets import QDialogButtonBox
+
+        from serial_tool.ui.rules_dialog import RulesDialog
+
+        dialog = RulesDialog(None, [])
+        box = dialog.findChild(QDialogButtonBox)
+
+        assert box.button(QDialogButtonBox.Ok).text() == "确定"
+        assert box.button(QDialogButtonBox.Cancel).text() == "取消"
+        dialog.close()

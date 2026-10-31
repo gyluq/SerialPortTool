@@ -1,6 +1,10 @@
 # SerialPortTool
 
+**English** · [简体中文](README.zh-CN.md)
+
 A PySide6 serial port monitor: connect, watch, search, highlight, log.
+
+![SerialPortTool main window](docs/images/main-window.png)
 
 The project is a rewrite against a written requirements document: the UI layout is
 kept from the original tool, the implementation is new and layer-separated so that
@@ -27,8 +31,17 @@ almost all behaviour can be tested without a real serial port or a display.
   next to the application, flushed on every write.
 - **Retention limit** — 100 KB … 10 MB or unlimited; oldest blocks are dropped
   at block boundaries so the remaining text keeps its colours and timestamps.
-- **Persistence** — every connection and display setting plus all highlight
-  rules are restored on the next start.
+- **Collapsible console** — below 1300 px the settings console folds into a
+  one-line bar that keeps connect / pause / clear / send within reach
+  (`` Ctrl+` `` toggles it manually).
+- **Persistence** — every connection and display setting, the display font and
+  all highlight rules are restored on the next start.
+
+## Screenshots
+
+| Narrow window — console folded into the bar | Highlight rules |
+|---|---|
+| ![](docs/images/console-collapsed.png) | ![](docs/images/rules-dialog.png) |
 
 ## Requirements
 
@@ -39,6 +52,23 @@ almost all behaviour can be tested without a real serial port or a display.
 ```bash
 pip install -r requirements.txt
 ```
+
+## Install
+
+Three ways to get a runnable program, in increasing order of convenience for
+the end user:
+
+| Form | Artifact | Who it is for |
+|---|---|---|
+| From source | — | developers, `python main.py` |
+| Portable exe | `dist/SerialPortTool.exe` (43 MB) | copy to a colleague, run from a USB stick |
+| Windows installer | `dist/SerialPortTool-1.0.0-setup.exe` (45 MB) | real distribution: Start menu entry, uninstaller |
+
+The two binaries are build outputs, not checked in — see [Packaging](#packaging).
+
+The installer is a per-user install into `%LOCALAPPDATA%\Programs\SerialPortTool`
+with no elevation prompt, because the app writes its `log\` folder next to the
+executable and `Program Files` is not writable for a normal user.
 
 ## Run
 
@@ -53,9 +83,9 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-The suite runs headless (`QT_QPA_PLATFORM=offscreen`) and needs no hardware:
-the serial port is replaced by a fake transport, settings are written to a
-temporary ini file.
+175 tests run in about two seconds. The suite is headless
+(`QT_QPA_PLATFORM=offscreen`) and needs no hardware: the serial port is replaced
+by a fake transport, settings are written to a temporary ini file.
 
 ## Benchmark
 
@@ -71,6 +101,9 @@ Scenarios: `single` (largest payload per call), `stream` (sustained MB/s),
 (RSS per capacity setting), `send` (large outbound paste), `loop` (end-to-end
 through the real reader thread).
 
+Measured on this machine: sustained receive **0.60–0.65 MB/s** (about 6× the
+921600 baud line rate) with **zero bytes lost** during a 10 s full-speed run.
+
 ## Architecture
 
 ```
@@ -84,6 +117,7 @@ serial_tool/
 │   ├── retention.py       decides how many leading blocks to drop
 │   ├── counters.py        received / sent character counters
 │   ├── config.py          config dataclass and dict serialisation
+│   ├── layout.py          console breakpoint and window minimums
 │   ├── logfile.py         log path naming and line writer
 │   └── session.py         port listing, transport abstraction, write queue
 ├── ui/                    PySide6 shell
@@ -105,13 +139,54 @@ and send path is tested against `tests.fakes.FakeTransport`.
 
 ## Packaging
 
+### Standalone executable
+
 ```bash
-pip install pyinstaller
+pip install -r requirements-dev.txt
 pyinstaller packaging.spec
 ```
 
-The spec bundles `icon.png` and hides the console window. Output goes to
-`dist/SerialPortTool.exe` (or `dist/SerialPortTool` on Linux/macOS).
+`packaging.spec` bundles `icon.png` and `icon.ico`, embeds `icon.ico` and
+`version_info.txt` as the executable's resources, and excludes the Qt modules
+the app never imports. Output is a single self-contained `dist/SerialPortTool.exe`
+(~43 MB); the target machine needs nothing installed. On Linux/macOS the same
+spec produces `dist/SerialPortTool`.
+
+### Windows installer
+
+Requires [Inno Setup 6](https://jrsoftware.org/isdl.php)
+(`winget install --id JRSoftware.InnoSetup -e`). Then run the whole chain —
+tests, executable, installer — with one command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\build_installer.ps1
+```
+
+The result is `dist/SerialPortTool-1.0.0-setup.exe` (~45 MB). Run
+`iscc installer\SerialPortTool.iss` alone to rebuild only the installer.
+
+What the installer does:
+
+| | |
+|---|---|
+| Install location | `%LOCALAPPDATA%\Programs\SerialPortTool` |
+| Elevation | none — per-user install, no UAC prompt |
+| Shortcuts | Start menu always, desktop optional |
+| Uninstall | standard Windows entry; asks before deleting `log\` |
+
+### Icon and screenshots
+
+Both are generated, not hand-edited:
+
+```bash
+python tools/make_icon.py          # icon.png + nine-frame icon.ico
+python tools/make_screenshots.py   # docs/images/*.png for the READMEs
+```
+
+Note for packagers: `app_base_dir()` in `core/config.py` resolves data paths
+from `sys.executable` when frozen. A onefile build unpacks into a temporary
+`_MEIxxxx` directory that is deleted on exit, so deriving the log path from
+`__file__` would silently lose every recording.
 
 ## License
 

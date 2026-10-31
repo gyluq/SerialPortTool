@@ -3,6 +3,7 @@ delegated to serial_tool.core."""
 
 from __future__ import annotations
 
+import sys
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSplitter,
     QStatusBar,
@@ -33,8 +35,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from serial_tool.core import codec, render
-from serial_tool.core.config import AppConfig
+from serial_tool.core import codec, layout, render
+from serial_tool.core.config import AppConfig, app_base_dir
 from serial_tool.core.counters import Counter
 from serial_tool.core.highlight import Rule
 from serial_tool.core.logfile import LogWriter, build_log_path
@@ -63,7 +65,13 @@ from serial_tool.ui.styles import (
 LIMIT_LABELS: tuple[str, ...] = ("100KB", "500KB", "1MB", "2MB", "5MB", "10MB", "无限制")
 PORT_REFRESH_MS = 1000
 READ_IDLE_SLEEP_MS = 10
-APP_DIR = Path(__file__).resolve().parents[2]
+# Logs go next to the executable in a packaged build, not inside the temp
+# unpack dir that PyInstaller deletes on exit.
+APP_DIR = app_base_dir(
+    is_frozen=bool(getattr(sys, "frozen", False)),
+    executable=sys.executable,
+    package_file=__file__,
+)
 
 
 def limit_to_chars(label: str) -> int:
@@ -134,6 +142,13 @@ class SerialPortTool(QMainWindow):
         self._block_chars: list[int] = []
         self._block_total = 0
 
+        # None means "let the window width decide"; True/False is the user's
+        # explicit choice, which then wins for the rest of the session.
+        self._manual_console: bool | None = None
+        self._console_toggle_buttons: list[QPushButton] = []
+        self._connect_buttons: list[QPushButton] = []
+        self._pause_buttons: list[QPushButton] = []
+
         self.counters = Counter()
         self._ports: list[PortInfo] = []
 
@@ -152,7 +167,10 @@ class SerialPortTool(QMainWindow):
     # ---------------------------------------------------------------- layout
 
     def _build_ui(self) -> None:
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 1320, 820)
+        # Without this the console's own minimum width (about 1182 px) becomes
+        # the window minimum, and the window cannot be narrowed at all.
+        self.setMinimumSize(layout.MIN_WINDOW_WIDTH, layout.MIN_WINDOW_HEIGHT)
         central = QWidget()
         self.setCentralWidget(central)
         outer = QVBoxLayout(central)
@@ -176,11 +194,24 @@ class SerialPortTool(QMainWindow):
         control_layout.addWidget(self._build_connection_panel())
         control_layout.addWidget(self._build_control_panel())
 
+        # The console keeps its natural width inside a scroll area, so forcing
+        # it open in a narrow window shows a scrollbar instead of overlapping
+        # controls.
+        self.console_area = QScrollArea()
+        self.console_area.setWidgetResizable(True)
+        self.console_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.console_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.console_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.console_area.setWidget(control)
+
         splitter.addWidget(self.display)
-        splitter.addWidget(control)
+        splitter.addWidget(self.console_area)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
         outer.addWidget(splitter, stretch=1)
+
+        self.compact_bar = self._build_compact_bar()
+        outer.addWidget(self.compact_bar)
 
     def _build_connection_panel(self) -> QGroupBox:
         group = QGroupBox("串口连接")
@@ -189,7 +220,6 @@ class SerialPortTool(QMainWindow):
         grid.setSpacing(6)
 
         self.port_combo = QComboBox()
-        self.port_combo.setMinimumWidth(120)
         self.baud_combo = QComboBox()
         self.baud_combo.setMinimumWidth(80)
         self.baud_combo.addItems([str(b) for b in BAUD_CHOICES])
@@ -206,7 +236,6 @@ class SerialPortTool(QMainWindow):
         self.stopbits_combo.addItems([STOPBITS_LABELS[s] for s in sorted(STOPBITS_LABELS)])
 
         self.connect_button = QPushButton("连接")
-        self.connect_button.setMinimumWidth(80)
 
         grid.addWidget(QLabel("端口:"), 0, 0)
         grid.addWidget(self.port_combo, 0, 1)
@@ -235,17 +264,25 @@ class SerialPortTool(QMainWindow):
 
         self.pause_button = QPushButton("暂停接收")
         self.clear_button = QPushButton("清除显示")
+        self.console_toggle_button = QPushButton("收起控制台 ▾")
+        self.console_toggle_button.setToolTip("收起底部控制台 (Ctrl+`)")
+        self.console_toggle_button.clicked.connect(self._toggle_console)
+        self._console_toggle_buttons.append(self.console_toggle_button)
+        self._connect_buttons.append(self.connect_button)
+        self._pause_buttons.append(self.pause_button)
+
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("输入搜索关键词...")
         self.search_edit.setMinimumWidth(150)
-        self.search_prev_button = QPushButton("previous")
+        self.search_prev_button = QPushButton("上一个")
         self.search_prev_button.setToolTip("向上搜索")
-        self.search_next_button = QPushButton("next")
+        self.search_next_button = QPushButton("下一个")
         self.search_next_button.setToolTip("向下搜索")
 
         for widget in (
             self.pause_button,
             self.clear_button,
+            self.console_toggle_button,
             QLabel("搜索:"),
             self.search_edit,
             self.search_prev_button,
@@ -308,6 +345,48 @@ class SerialPortTool(QMainWindow):
         layout.addWidget(bottom)
         return group
 
+    def _build_compact_bar(self) -> QWidget:
+        """One-line stand-in for the console, shown whenever the console is hidden."""
+        bar = QWidget()
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(6, 4, 6, 4)
+        row.setSpacing(6)
+
+        self.mini_connect_button = QPushButton("连接")
+        self.mini_connect_button.clicked.connect(self._toggle_connection)
+        self.mini_pause_button = QPushButton("暂停接收")
+        self.mini_pause_button.clicked.connect(self._toggle_pause)
+        self.mini_clear_button = QPushButton("清除显示")
+        self.mini_clear_button.clicked.connect(self._clear_display)
+        self.mini_toggle_button = QPushButton("展开控制台 ▴")
+        self.mini_toggle_button.setToolTip("展开底部控制台 (Ctrl+`)")
+        self.mini_toggle_button.clicked.connect(self._toggle_console)
+
+        self._connect_buttons.append(self.mini_connect_button)
+        self._pause_buttons.append(self.mini_pause_button)
+        self._console_toggle_buttons.append(self.mini_toggle_button)
+
+        self.mini_send_edit = QLineEdit()
+        self.mini_send_edit.setPlaceholderText("输入要发送的数据...")
+        self.mini_send_edit.setMinimumWidth(90)
+        self.mini_send_edit.textChanged.connect(self._update_send_state)
+        self.mini_send_button = QPushButton("发送")
+        self.mini_send_button.setEnabled(False)
+        self.mini_send_button.clicked.connect(self._send_mini)
+
+        for widget in (
+            self.mini_connect_button,
+            self.mini_pause_button,
+            self.mini_clear_button,
+            self.mini_toggle_button,
+        ):
+            row.addWidget(widget)
+        row.addWidget(self.mini_send_edit, stretch=1)
+        row.addWidget(self.mini_send_button)
+
+        bar.setVisible(False)
+        return bar
+
     def _build_status_bar(self) -> None:
         status = QStatusBar()
         self.setStatusBar(status)
@@ -321,6 +400,31 @@ class SerialPortTool(QMainWindow):
         status.addPermanentWidget(self.reset_button)
         self._update_status()
 
+    # ------------------------------------------------------ console visibility
+
+    def _apply_console_state(self) -> None:
+        """Show the console or the compact bar, honouring a manual choice."""
+        if not hasattr(self, "compact_bar"):
+            return
+
+        visible = layout.console_visible(self.width(), self._manual_console)
+        self.console_area.setVisible(visible)
+        self.compact_bar.setVisible(not visible)
+
+        label = "收起控制台 ▾" if visible else "展开控制台 ▴"
+        for button in self._console_toggle_buttons:
+            button.setText(label)
+        self.console_action.setChecked(visible)
+
+    def _toggle_console(self) -> None:
+        """Manual choice: from now on the width no longer decides."""
+        self._manual_console = not layout.console_visible(self.width(), self._manual_console)
+        self._apply_console_state()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        self._apply_console_state()
+
     def _build_menu(self) -> None:
         menubar = self.menuBar()
 
@@ -331,6 +435,16 @@ class SerialPortTool(QMainWindow):
         file_menu.addAction(quit_action)
 
         view_menu = menubar.addMenu("视图(&V)")
+        self.console_action = QAction("显示控制台(&C)", self)
+        self.console_action.setCheckable(True)
+        self.console_action.setChecked(True)
+        self.console_action.setShortcut("Ctrl+`")
+        # triggered only fires on user activation, so setChecked() in the sync
+        # method cannot feed back into a toggle loop.
+        self.console_action.triggered.connect(self._toggle_console)
+        view_menu.addAction(self.console_action)
+        view_menu.addSeparator()
+
         limit_menu = view_menu.addMenu("数据限制(&L)")
         self._limit_actions: dict[str, QAction] = {}
         self._limit_group = QActionGroup(self)
@@ -486,12 +600,14 @@ class SerialPortTool(QMainWindow):
         self._reader.connection_lost.connect(self._handle_connection_lost)
         self._reader.start()
 
-        self.connect_button.setText("断开")
-        self.connect_button.setStyleSheet(CONNECT_BUTTON_CONNECTED)
         self._append_line(
-            render.Line(f"已连接到 {params.port} (波特率: {params.baudrate})", render.Style.SYSTEM, now_stamp())
+            render.Line(
+                f"已连接到 {params.port} (波特率: {params.baudrate})",
+                render.Style.SYSTEM,
+                now_stamp(),
+            )
         )
-        self._update_send_state()
+        self._sync_command_state()
 
     def _disconnect(self) -> None:
         if self._reader is not None:
@@ -501,10 +617,8 @@ class SerialPortTool(QMainWindow):
             self._session.close()
             self._session = None
 
-        self.connect_button.setText("连接")
-        self.connect_button.setStyleSheet(CONNECT_BUTTON_IDLE)
         self._append_line(render.Line("连接已断开", render.Style.SYSTEM, now_stamp()))
-        self._update_send_state()
+        self._sync_command_state()
 
     def _handle_connection_lost(self, reason: str) -> None:
         self._disconnect()
@@ -598,13 +712,10 @@ class SerialPortTool(QMainWindow):
 
     def _toggle_pause(self) -> None:
         self._paused = not self._paused
+        self._sync_command_state()
         if self._paused:
-            self.pause_button.setText("恢复接收")
-            self.pause_button.setStyleSheet(PAUSE_BUTTON_ACTIVE)
             return
 
-        self.pause_button.setText("暂停接收")
-        self.pause_button.setStyleSheet("")
         buffered = list(self._pause_buffer)
         self._pause_buffer.clear()
         self._pause_chars = 0
@@ -614,11 +725,16 @@ class SerialPortTool(QMainWindow):
     # ---------------------------------------------------------------- sending
 
     def _send(self) -> None:
+        self._do_send(self.send_edit.toPlainText())
+
+    def _send_mini(self) -> None:
+        self._do_send(self.mini_send_edit.text())
+
+    def _do_send(self, text: str) -> None:
         if self._session is None or not self._session.is_open:
             QMessageBox.warning(self, "警告", "请先连接串口")
             return
 
-        text = self.send_edit.toPlainText()
         if not text:
             return
 
@@ -643,9 +759,25 @@ class SerialPortTool(QMainWindow):
         self._save_config()
 
     def _update_send_state(self) -> None:
+        self._sync_command_state()
+
+    def _sync_command_state(self) -> None:
+        """Keep the console buttons and their compact-bar twins in step.
+
+        Every state change goes through here so the two sets of controls can
+        never disagree about whether the port is open or receiving is paused.
+        """
         connected = self._session is not None and self._session.is_open
-        has_text = bool(self.send_edit.toPlainText().strip())
-        self.send_button.setEnabled(connected and has_text)
+
+        for button in self._connect_buttons:
+            button.setText("断开" if connected else "连接")
+            button.setStyleSheet(CONNECT_BUTTON_CONNECTED if connected else CONNECT_BUTTON_IDLE)
+        for button in self._pause_buttons:
+            button.setText("恢复接收" if self._paused else "暂停接收")
+            button.setStyleSheet(PAUSE_BUTTON_ACTIVE if self._paused else "")
+
+        self.send_button.setEnabled(connected and bool(self.send_edit.toPlainText().strip()))
+        self.mini_send_button.setEnabled(connected and bool(self.mini_send_edit.text().strip()))
 
     # ---------------------------------------------------------------- misc
 
