@@ -53,10 +53,10 @@ pip install -r requirements.txt
 | 形态 | 产物 | 适合谁 |
 |---|---|---|
 | 源码运行 | — | 开发者，`python main.py` |
-| 绿色单文件 | `dist/SerialPortTool.exe`（43 MB） | 拷给同事、放 U 盘直接双击 |
-| Windows 安装包 | `dist/SerialPortTool-1.0.0-setup.exe`（45 MB） | 正式分发：开始菜单快捷方式 + 卸载项 |
+| 绿色单文件 | `SerialPortTool.exe`（43 MB） | 拷给同事、放 U 盘直接双击 |
+| Windows 安装包 | `SerialPortTool-1.0.0-setup.exe`（45 MB） | 正式分发：开始菜单快捷方式 + 卸载项 |
 
-两个二进制都是构建产物，不入库，生成方式见[打包](#打包)。
+两个二进制都挂在[最新发布](https://github.com/gyluq/SerialPortTool/releases/latest)的附件里，不入库——它们是构建产物，生成方式见[打包](#打包)。
 
 安装包是**当前用户**安装，装到 `%LOCALAPPDATA%\Programs\SerialPortTool`，不弹 UAC。
 这不是随手选的：程序会把 `log\` 写在 exe 同级目录，装进 `Program Files` 普通用户写不进去。

@@ -61,10 +61,11 @@ the end user:
 | Form | Artifact | Who it is for |
 |---|---|---|
 | From source | — | developers, `python main.py` |
-| Portable exe | `dist/SerialPortTool.exe` (43 MB) | copy to a colleague, run from a USB stick |
-| Windows installer | `dist/SerialPortTool-1.0.0-setup.exe` (45 MB) | real distribution: Start menu entry, uninstaller |
+| Portable exe | `SerialPortTool.exe` (43 MB) | copy to a colleague, run from a USB stick |
+| Windows installer | `SerialPortTool-1.0.0-setup.exe` (45 MB) | real distribution: Start menu entry, uninstaller |
 
-The two binaries are build outputs, not checked in — see [Packaging](#packaging).
+Both binaries are attached to the [latest release](https://github.com/gyluq/SerialPortTool/releases/latest)
+rather than committed — they are build outputs, see [Packaging](#packaging).
 
 The installer is a per-user install into `%LOCALAPPDATA%\Programs\SerialPortTool`
 with no elevation prompt, because the app writes its `log\` folder next to the
